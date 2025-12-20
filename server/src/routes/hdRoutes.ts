@@ -11,6 +11,7 @@ router.post('/my-knowledge', authenticateToken, hdController.getMyKnowledge);
 router.get('/', authenticateToken, isAdmin, hdController.getAllKnowledge);
 router.get('/:key', authenticateToken, isAdmin, hdController.getKnowledgeByKey);
 router.post('/', authenticateToken, isAdmin, hdController.saveKnowledge);
+router.post('/bulk', authenticateToken, isAdmin, hdController.importBulkKnowledge);
 router.delete('/:key', authenticateToken, isAdmin, hdController.deleteKnowledge);
 
 export default router;

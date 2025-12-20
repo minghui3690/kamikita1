@@ -3,6 +3,51 @@ import prisma from '../lib/prisma';
 
 // --- ADMIN: CRUD Operations ---
 
+export const importBulkKnowledge = async (req: Request, res: Response) => {
+    try {
+        const items = req.body; // Expecting array of { key, category, title, contentLevel1... }
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ message: 'Invalid data format. Expected non-empty array.' });
+        }
+
+        console.log(`[HD Import] Starting bulk import of ${items.length} items...`);
+
+        // Run in transaction for consistency
+        await prisma.$transaction(
+            items.map((item: any) => 
+                prisma.hDKnowledge.upsert({
+                    where: { key: item.key },
+                    update: {
+                        category: item.category,
+                        title: item.title,
+                        contentLevel1: item.contentLevel1,
+                        contentLevel2: item.contentLevel2,
+                        contentLevel3: item.contentLevel3,
+                        contentLevel4: item.contentLevel4
+                    },
+                    create: {
+                        key: item.key,
+                        category: item.category,
+                        title: item.title,
+                        contentLevel1: item.contentLevel1,
+                        contentLevel2: item.contentLevel2,
+                        contentLevel3: item.contentLevel3,
+                        contentLevel4: item.contentLevel4
+                    }
+                })
+            )
+        );
+
+        console.log('[HD Import] Successfully imported all items.');
+        res.json({ message: `Successfully imported ${items.length} items.` });
+
+    } catch (error) {
+        console.error('Bulk Import Error:', error);
+        res.status(500).json({ message: 'Error importing data.' });
+    }
+};
+
 export const getAllKnowledge = async (req: Request, res: Response) => {
     try {
         const items = await prisma.hDKnowledge.findMany({

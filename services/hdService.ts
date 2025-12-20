@@ -12,6 +12,11 @@ export const saveKnowledge = async (data: any) => {
     return response.data;
 };
 
+export const importBulkKnowledge = async (data: any[]) => {
+    const response = await api.post('/hd-knowledge/bulk', data);
+    return response.data;
+};
+
 export const deleteKnowledge = async (key: string) => {
     const encodedKey = encodeURIComponent(key);
     const response = await api.delete(`/hd-knowledge/${encodedKey}`);

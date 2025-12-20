@@ -30,6 +30,11 @@ const HDKnowledgeManager: React.FC = () => {
     const [editItem, setEditItem] = useState<Partial<HDKnowledgeItem>>({});
     const [activeTab, setActiveTab] = useState<1 | 2 | 3 | 4>(1);
     
+    // Import State
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importData, setImportData] = useState<any[]>([]);
+    const [importSummary, setImportSummary] = useState({ total: 0, new: 0, existing: 0 });
+
     useEffect(() => {
         loadItems();
     }, []);
@@ -86,6 +91,71 @@ const HDKnowledgeManager: React.FC = () => {
         }
     };
 
+    // --- CSV IMPORT LOGIC ---
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Dynamically import Papa to avoid SSR issues if any, though likely client-side only here
+        import('papaparse').then((Papa) => {
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    const parsed = results.data;
+                    if (parsed.length === 0) {
+                        alert('CSV is empty or invalid.');
+                        return;
+                    }
+                    
+                    // Simple validation/mapping
+                    // Expected headers: Key, Category, Title, Level 1, Level 2, Level 3, Level 4
+                    const mappedData = parsed.map((row: any) => ({
+                        key: row['Key']?.trim() || row['key']?.trim(),
+                        category: row['Category']?.trim() || row['category']?.trim() || 'Type',
+                        title: row['Title']?.trim() || row['title']?.trim(),
+                        contentLevel1: row['Level 1'] || row['contentLevel1'] || '',
+                        contentLevel2: row['Level 2'] || row['contentLevel2'] || '',
+                        contentLevel3: row['Level 3'] || row['contentLevel3'] || '',
+                        contentLevel4: row['Level 4'] || row['contentLevel4'] || ''
+                    })).filter((item: any) => item.key); // Must have ID
+
+                    setImportData(mappedData);
+                    setImportSummary({
+                        total: mappedData.length,
+                        new: 0, // Backend determines this really, but we can verify against current list
+                        existing: 0
+                    });
+                    setShowImportModal(true);
+                    
+                    // Reset input
+                    e.target.value = '';
+                },
+                error: (error: any) => {
+                    console.error('CSV Error:', error);
+                    alert('Failed to parse CSV');
+                }
+            });
+        });
+    };
+
+    const confirmImport = async () => {
+        try {
+            if (confirm(`Importing ${importData.length} items. Continue?`)) {
+                await hdService.importBulkKnowledge(importData);
+                alert('Import successful!');
+                setShowImportModal(false);
+                setImportData([]);
+                loadItems();
+            }
+        } catch (e: any) {
+            console.error(e);
+            alert('Import failed: ' + (e.response?.data?.message || e.message));
+        }
+    };
+
+
     // Filter Logic
     const filteredItems = items.filter(item => {
         const matchesCategory = filterCategory === 'All' || item.category === filterCategory;
@@ -101,10 +171,60 @@ const HDKnowledgeManager: React.FC = () => {
                     <h2 className="text-2xl font-bold text-gray-800">HD Knowledge Base</h2>
                     <p className="text-sm text-gray-500">Manage descriptions for Human Design components.</p>
                 </div>
-                <button onClick={handleCreateNew} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-purple-700">
-                    <Icons.Plus /> Add New Item
-                </button>
+                <div className="flex gap-2">
+                    <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-green-700 cursor-pointer">
+                        <Icons.Upload /> Import CSV
+                        <input 
+                            type="file" 
+                            accept=".csv" 
+                            className="hidden" 
+                            onChange={handleFileUpload}
+                        />
+                    </label>
+                    <button onClick={handleCreateNew} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-purple-700">
+                        <Icons.Plus /> Add New Item
+                    </button>
+                </div>
             </div>
+
+            {/* IMPORT PREVIEW MODAL */}
+            {showImportModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white p-6 rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                        <h3 className="text-xl font-bold mb-4">Confirm Import</h3>
+                        <div className="bg-blue-50 p-4 rounded-lg mb-4 text-sm text-blue-800">
+                             Ready to import <strong>{importData.length}</strong> items. <br/>
+                             Existing items with the same <strong>Key</strong> will be updated. New ones will be created.
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto border rounded mb-4">
+                            <table className="w-full text-xs text-left">
+                                <thead className="bg-gray-100 sticky top-0">
+                                    <tr>
+                                        <th className="p-2">Key</th>
+                                        <th className="p-2">Title</th>
+                                        <th className="p-2">Lvl 1 (Preview)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {importData.map((item, idx) => (
+                                        <tr key={idx} className="border-b hover:bg-gray-50">
+                                            <td className="p-2 font-mono font-bold">{item.key}</td>
+                                            <td className="p-2">{item.title}</td>
+                                            <td className="p-2 text-gray-500 truncate max-w-[200px]">{item.contentLevel1?.substring(0, 50)}...</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded">Cancel</button>
+                            <button onClick={confirmImport} className="px-6 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700">Confirm Import</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isEditing ? (
                 <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">

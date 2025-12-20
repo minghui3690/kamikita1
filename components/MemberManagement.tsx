@@ -237,7 +237,8 @@ const MemberManagement: React.FC<Props> = ({ currentLang = 'EN', currentUser }) 
             birthCity: user.kyc.birthCity,
             birthTime: user.kyc.birthTime,
             address: user.kyc.address,
-            withdrawalMethods: user.kyc.withdrawalMethods || []
+            withdrawalMethods: user.kyc.withdrawalMethods || [],
+            role: user.role
         });
         // Check for Human Design
         try {
@@ -255,8 +256,8 @@ const MemberManagement: React.FC<Props> = ({ currentLang = 'EN', currentUser }) 
     const handleOpenEmailModal = (product: Product, user: User) => {
         setSelectedProductForEmail(product);
         setEmailRecipient(user.email);
-        setEmailSubject(`Access to your Purchased File: ${product.name}`);
-        setEmailMessage(`Halo ${user.name},\n\nTerima kasih telah melakukan pembelian "${product.name}".\n\nSilakan akses file Anda melalui dashboard member area bagian "My Purchases".\n\nJika ada pertanyaan, silakan hubungi admin.\n\nSalam,\nAdmin RDA Bisnis`);
+        setEmailSubject(`Access to your Purchased File: ${product.nameproduct}`);
+        setEmailMessage(`Halo ${user.name},\n\nTerima kasih telah melakukan pembelian "${product.nameproduct}".\n\nSilakan akses file Anda melalui dashboard member area bagian "My Purchases".\n\nJika ada pertanyaan, silakan hubungi admin.\n\nSalam,\nAdmin KamiKita`);
         setEmailModalOpen(true);
     };
 
@@ -464,22 +465,20 @@ const MemberManagement: React.FC<Props> = ({ currentLang = 'EN', currentUser }) 
         if (e.target.files && e.target.files[0] && modalUser) {
             const file = e.target.files[0];
             setIsLoading(true);
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                setTimeout(async () => {
-                    if (ev.target?.result) {
-                        try {
-                            await userService.updateUserAccess(modalUser.id, p.id, ev.target.result as string, file.name, p.name);
-                            handleShowPdf(modalUser);
-                        } catch (e: any) { 
-                            console.error("Upload Loop Error:", e);
-                            alert('Failed to update file: ' + (e.response?.data?.message || e.message)); 
-                        }
+            userService.uploadFile(file)
+                .then(async (res) => {
+                    try {
+                        const targetId = (p as any)._transactionId || p.id;
+                        await userService.updateUserAccess(modalUser.id, targetId, res.url, file.name, p.nameproduct);
+                        handleShowPdf(modalUser);
+                        alert('File updated successfully!');
+                    } catch (e: any) { 
+                        console.error("Update Access Error:", e);
+                        alert('Failed to link file: ' + (e.response?.data?.message || e.message)); 
+                    } finally {
+                        setIsLoading(false);
                     }
-                    setIsLoading(false);
-                }, 1500);
-            };
-            reader.readAsDataURL(file);
+                });
         }
     };
 
