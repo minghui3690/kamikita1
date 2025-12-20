@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { getKakaItems, saveKakaItems } from '../services/mockDatabase';
+import React, { useState, useEffect } from 'react';
+import * as userService from '../services/userService';
 import { KakaItem } from '../types';
 import { Icons, TRANSLATIONS } from '../constants';
 
@@ -9,33 +9,54 @@ interface Props {
 }
 
 const KakaManagement: React.FC<Props> = ({ currentLang = 'EN' }) => {
-  const [items, setItems] = useState<KakaItem[]>(getKakaItems());
+  const [items, setItems] = useState<KakaItem[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editItem, setEditItem] = useState<Partial<KakaItem>>({});
+  const [isLoading, setIsLoading] = useState(false);
   const t = TRANSLATIONS[currentLang] || TRANSLATIONS['EN'];
 
-  const handleSave = () => {
-      let newItems = [...items];
-      if (editItem.id) {
-          newItems = newItems.map(i => i.id === editItem.id ? { ...i, ...editItem } as KakaItem : i);
-      } else {
-          newItems.push({
-              ...editItem,
-              id: 'k' + Date.now(),
-              date: editItem.date || new Date().toISOString().split('T')[0]
-          } as KakaItem);
+  useEffect(() => {
+      fetchItems();
+  }, []);
+
+  const fetchItems = async () => {
+      try {
+          const data = await userService.getKakaItems();
+          setItems(data);
+      } catch (error) {
+          console.error('Failed to fetch Kaka items', error);
       }
-      saveKakaItems(newItems);
-      setItems(newItems);
-      setIsEditing(false);
-      setEditItem({});
   };
 
-  const handleDelete = (id: string) => {
+  const handleSave = async () => {
+      setIsLoading(true);
+      try {
+          if (editItem.id) {
+              await userService.updateKakaItem(editItem.id, editItem);
+          } else {
+              await userService.createKakaItem({
+                  ...editItem,
+                  date: editItem.date || new Date().toISOString().split('T')[0]
+              });
+          }
+          await fetchItems();
+          setIsEditing(false);
+          setEditItem({});
+      } catch (error) {
+          alert('Failed to save item');
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleDelete = async (id: string) => {
       if (confirm('Delete this KAKA item?')) {
-          const newItems = items.filter(i => i.id !== id);
-          saveKakaItems(newItems);
-          setItems(newItems);
+          try {
+              await userService.deleteKakaItem(id);
+              fetchItems();
+          } catch (e) {
+              alert('Failed to delete item');
+          }
       }
   };
 
@@ -88,7 +109,7 @@ const KakaManagement: React.FC<Props> = ({ currentLang = 'EN' }) => {
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div>
                        <label className="text-xs font-bold text-gray-700 mb-1 block">{t.date}</label>
-                       <input type="date" className="border p-2 rounded w-full" value={editItem.date || ''} onChange={e => setEditItem({...editItem, date: e.target.value})} />
+                       <input type="date" className="border p-2 rounded w-full" value={editItem.date ? new Date(editItem.date).toISOString().split('T')[0] : ''} onChange={e => setEditItem({...editItem, date: e.target.value})} />
                    </div>
                    <div>
                        <label className="text-xs font-bold text-gray-700 mb-1 block">{t.media} Type</label>
@@ -126,8 +147,10 @@ const KakaManagement: React.FC<Props> = ({ currentLang = 'EN' }) => {
                    )}
                </div>
                <div className="mt-6 flex gap-2 justify-end border-t pt-4">
-                   <button onClick={() => setIsEditing(false)} className="text-gray-500 px-4 py-2 font-medium text-sm">Cancel</button>
-                   <button onClick={handleSave} className="bg-emerald-600 text-white px-6 py-2 rounded font-bold shadow-md hover:bg-emerald-700">Save Info</button>
+                   <button onClick={() => setIsEditing(false)} className="text-gray-500 px-4 py-2 font-medium text-sm" disabled={isLoading}>Cancel</button>
+                   <button onClick={handleSave} className="bg-emerald-600 text-white px-6 py-2 rounded font-bold shadow-md hover:bg-emerald-700 disabled:opacity-50" disabled={isLoading}>
+                       {isLoading ? 'Saving...' : 'Save Info'}
+                   </button>
                </div>
            </div>
        )}

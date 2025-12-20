@@ -1,0 +1,361 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  MEMBER
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  GATEWAY
+  POINT_CUT
+}
+
+enum TransactionStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model User {
+  id              String   @id @default(uuid())
+  name            String
+  username        String?  @unique // [NEW] Auto-generated username
+  email           String   @unique
+  password        String
+  role            UserRole @default(MEMBER)
+  referralCode    String   @unique
+  uplineId        String?
+  walletBalance   Float    @default(0)
+  totalEarnings   Float    @default(0)
+  joinedAt        DateTime @default(now())
+  isActive        Boolean  @default(true)
+  isKakaUnlocked  Boolean  @default(false)
+  isHumanDesignUnlocked Boolean @default(false)
+  isAiAssistantUnlocked Boolean @default(false)
+  membershipExpiryDate DateTime? // [NEW] Membership Expiry
+  avatar          String?  @db.LongText
+  kyc             Json?    // Stores phone, address, bank details, etc.
+  
+  // Relations
+  upline          User?     @relation("Network", fields: [uplineId], references: [id])
+  downline        User[]    @relation("Network")
+  transactions    Transaction[]
+  commissions     CommissionLog[] @relation("Beneficiary")
+  withdrawals     WithdrawalRequest[]
+  walletLogs      WalletLog[]
+  pointLogs       PointLog[]
+  humanDesign     HumanDesignProfile?
+  customers       Customer[] @relation("CustomerReferrer")
+  consultationCredits ConsultationCredit[] @relation("UserConsultationCredits")
+  
+  // Knowledge Base Access
+  hdAccessLevel1  Boolean  @default(false)
+  hdAccessLevel2  Boolean  @default(false)
+  hdAccessLevel3  Boolean  @default(false)
+  hdAccessLevel4  Boolean  @default(false)
+  testimonials    Testimonial[]
+}
+
+model Product {
+  id                String  @id @default(uuid())
+  nameproduct       String  // [RENAMED] was name
+  price             Float
+  points            Float
+  description       String  @db.LongText
+  image             String? @db.LongText
+  pdfUrl            String?
+  customRedirectUrl String?
+  activeDays        Int     @default(0) // [NEW] Duration in days
+  
+  // Consultation Fields
+  // Consultation Fields
+  isConsultation    Boolean @default(false)
+  consultationQuota Int     @default(0) // How many sessions this product grants
+  testimonials      Testimonial[]
+}
+
+
+model Transaction {
+  id                     String            @id @default(uuid())
+  userId                 String?           
+  user                   User?             @relation(fields: [userId], references: [id])
+  customerId             String?           
+  customer               Customer?         @relation(fields: [customerId], references: [id])
+  items                  Json              
+  nameproduct            String?           // [NEW] Snapshot of main product name
+  subtotal               Float
+  taxAmount              Float
+  discountAmount         Float
+  pointsRedeemed         Float
+  pointsRedeemedValue    Float
+  totalAmount            Float
+  totalPointsEarned      Float
+  status                 TransactionStatus @default(PENDING)
+  paymentMethod          PaymentMethod
+  paymentProof           String?
+  timestamp              DateTime          @default(now())
+  commissionsDistributed Boolean           @default(false)
+  voucherCode            String?
+  isArchived             Boolean           @default(false)
+  
+  commissions            CommissionLog[]
+}
+
+model Customer {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   
+  phone        String
+  referralCode String?  
+  nameproduct  String?  // [NEW] Stores product name of last purchase (or main purchase)
+  
+  referrerId   String?
+  referrer     User?    @relation("CustomerReferrer", fields: [referrerId], references: [id])
+  
+  transactions Transaction[]
+  consultationCredits ConsultationCredit[] @relation("CustomerConsultationCredits")
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  emailStatus     String   @default("PENDING") // PENDING | SENT
+  lastEmailSentAt DateTime?
+  isArchived      Boolean  @default(false)
+}
+
+// ... existing models ...
+
+model CommissionLog {
+  id            String      @id @default(uuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  beneficiaryId String
+  beneficiary   User        @relation("Beneficiary", fields: [beneficiaryId], references: [id])
+  sourceUserId  String?     // Optional if source is a guest (could store Customer Name in metadata or just nullable)
+  level         Int
+  amount        Float
+  timestamp     DateTime    @default(now())
+  isArchived    Boolean     @default(false)
+}
+
+model WithdrawalRequest {
+  id              String           @id @default(uuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  userName        String
+  amount          Float
+  bankDetails     String
+  status          WithdrawalStatus @default(PENDING)
+  requestDate     DateTime         @default(now())
+  processDate     DateTime?
+  adminProofImage String?          @db.LongText
+  adminProofLink  String?
+  rejectionReason String?
+  isArchived      Boolean          @default(false)
+}
+
+model Testimonial {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  rating    Int      // 1-5
+  content   String   @db.LongText
+  image     String?  @db.LongText // Optional user uploaded photo
+  isPublic  Boolean  @default(true) // Admin can hide by setting this to false
+  createdAt DateTime @default(now())
+}
+
+model WalletLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        String   // DEPOSIT, WITHDRAWAL, COMMISSION, PURCHASE
+  amount      Float
+  description String?
+  timestamp   DateTime @default(now())
+  isArchived  Boolean  @default(false)
+}
+
+model PointLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        String   // EARN, SPEND
+  amount      Float
+  description String?
+  timestamp   DateTime @default(now())
+}
+
+model SystemSettings {
+  id               String   @id @default(uuid())
+  commissionLevels Int      @default(3)
+  levelPercentages Json     // Stores array like [20, 5, 2]
+  pointRate        Float    @default(1000)
+  taxPercentage    Float    @default(0)
+  
+  // JSON Blobs for UI config
+  branding         Json?    
+  landingPage      Json?
+  productPage      Json?
+  paymentConfig    Json?   // Midtrans etc.
+  memberProfileConfig Json?
+  
+  updatedAt        DateTime @updatedAt
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  date      DateTime @default(now())
+  content   String   @db.Text
+  image     String?
+}
+
+model Voucher {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  discountPercent Float
+  startDate       DateTime
+  endDate         DateTime
+  isActive        Boolean  @default(true)
+}
+
+model KakaItem {
+  id          String   @id @default(uuid())
+  date        DateTime @default(now())
+  description String
+  mediaType   String // PHOTO, LINK, FILE, NONE
+  mediaUrl    String? @db.LongText
+  mediaName   String?
+}
+
+model HumanDesignProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  chartImage       String?  @db.LongText
+  
+  // Scanned Data
+  chartName        String?
+  chartBirthDate   String?
+  chartBirthTime   String?
+  chartBirthCity   String?
+  chartDesignDate  String?  // [NEW]
+  
+  // Basic Info
+  type             String?
+  profile          String?
+  authority        String?
+  strategy         String?
+  definition       String?
+  signature        String?
+  notSelfTheme     String?
+  incarnationCross String?
+  
+  // Variables
+  digestion        String?
+  sense            String?
+  designSense      String?  // [NEW]
+  motivation       String?
+  perspective      String?
+  environment      String?
+  
+  // Detailed Data (JSON)
+  design           Json?
+  personality      Json?
+  centers          Json?
+  channels         Json?
+  
+  updatedAt        DateTime @updatedAt
+}
+
+
+model HDKnowledge {
+  id           String   @id @default(uuid())
+  key          String   @unique // e.g. TYPE_GENERATOR, CHANNEL_34-20
+  category     String   // Type, Profile, Center, Channel, Gate
+  title        String
+  
+  contentLevel1 String? @db.LongText
+  contentLevel2 String? @db.LongText
+  contentLevel3 String? @db.LongText
+  contentLevel4 String? @db.LongText
+  
+  updatedAt    DateTime @updatedAt
+}
+
+// ============================================
+// CONSULTATION SYSTEM (MAGIC LINK)
+// ============================================
+
+model ConsultationSlot {
+  id        String   @id @default(uuid())
+  startTime DateTime
+  endTime   DateTime
+  isBooked  Boolean  @default(false)
+  
+  // Relations
+  session   ConsultationSession?
+}
+
+model ConsultationCredit {
+  id             String   @id @default(uuid())
+  
+  // Owner (Polymorphic: either Member or Guest)
+  userId         String?
+  user           User?    @relation("UserConsultationCredits", fields: [userId], references: [id])
+  customerId     String?
+  customer       Customer? @relation("CustomerConsultationCredits", fields: [customerId], references: [id])
+
+  productName    String   // e.g. "Private Coaching 4 Sesi"
+  totalQuota     Int
+  usedQuota      Int      @default(0)
+  
+  magicToken     String   @unique @default(uuid()) // The "Key" for Guest Access
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+  
+  sessions       ConsultationSession[]
+}
+
+model ConsultationSession {
+  id             String   @id @default(uuid())
+  
+  creditId       String
+  credit         ConsultationCredit @relation(fields: [creditId], references: [id])
+  
+  slotId         String   @unique
+  slot           ConsultationSlot @relation(fields: [slotId], references: [id])
+  
+  status         String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELED, RESCHEDULED
+  meetingLink    String?
+  
+  // Notes & Results
+  adminNotes     String?  @db.LongText // Private (For Admin only)
+  clientNotes    String?  @db.LongText // [NEW] Public (Summary for Client to learn)
+  recordingUrl   String?               // [NEW] Link to session recording
+  
+  // Reschedule Tracking
+  rescheduleCount Int     @default(0)  // [NEW] Limit to 1x if needed
+  
+  createdAt      DateTime @default(now())
+}

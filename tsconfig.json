@@ -25,5 +25,6 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": ["src/**/*", "types/**/*", "constants.tsx", "App.tsx", "main.tsx", "components/**/*", "services/**/*"]
 }

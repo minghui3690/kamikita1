@@ -1,29 +1,78 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { getSalesStats, getTransactions, archiveActions, unhideActions } from '../services/mockDatabase';
-import { Transaction } from '../types';
+import { useNavigate } from 'react-router-dom';
+import { transactionApi } from '../services/transactionService';
+import { Transaction, CartItem } from '../types';
 import { Icons } from '../constants';
 
 const BusinessStats: React.FC = () => {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
   const [limit, setLimit] = useState(10);
   const [showHidden, setShowHidden] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [stats, setStats] = useState(getSalesStats('monthly'));
+  
+  const parseItems = (items: any): CartItem[] => {
+      if (typeof items === 'string') {
+          try {
+              return JSON.parse(items);
+          } catch (e) {
+              return [];
+          }
+      }
+      return items || [];
+  };
+
+  const processSalesStats = (txs: Transaction[], p: 'weekly' | 'monthly' | 'yearly') => {
+      const paidTxs = txs.filter(t => t.status === 'PAID');
+      const data: { label: string, amount: number }[] = [];
+      const now = new Date();
+
+      if (p === 'weekly') {
+        for(let i=6; i>=0; i--) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - i);
+            const label = d.toLocaleDateString('en-US', { weekday: 'short' });
+            const amount = paidTxs.filter(t => new Date(t.timestamp).toDateString() === d.toDateString()).reduce((sum, t) => sum + t.totalAmount, 0);
+            data.push({ label, amount });
+        }
+      } else if (p === 'monthly') {
+         for(let i=5; i>=0; i--) {
+             const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+             const label = d.toLocaleDateString('en-US', { month: 'short' });
+             const amount = paidTxs.filter(t => {
+                 const td = new Date(t.timestamp);
+                 return td.getMonth() === d.getMonth() && td.getFullYear() === d.getFullYear();
+             }).reduce((sum, t) => sum + t.totalAmount, 0);
+             data.push({ label, amount });
+         }
+      } else {
+        for(let i=4; i>=0; i--) {
+            const year = now.getFullYear() - i;
+            const amount = paidTxs.filter(t => new Date(t.timestamp).getFullYear() === year).reduce((sum, t) => sum + t.totalAmount, 0);
+            data.push({ label: year.toString(), amount });
+        }
+      }
+      return data;
+  };
+
+  const [stats, setStats] = useState<{label:string, amount:number}[]>([]); 
   
   // Prevent Division by Zero
   const maxVal = Math.max(...stats.map(s => s.amount), 10000); 
 
-  const refreshData = useCallback(() => {
-      const allTx = getTransactions();
-      // Filter based on hidden state
-      const filtered = allTx.filter(t => showHidden ? t.isArchived : !t.isArchived);
-      // Sort by newest
-      filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      setTransactions(filtered);
-      setStats(getSalesStats(period));
-      setSelectedIds([]);
+  const refreshData = useCallback(async () => {
+      try {
+          // Fetch from API
+          const allTx = await transactionApi.getAllTransactions();
+          const filtered = allTx.filter(t => showHidden ? t.isArchived : !t.isArchived); 
+          
+          setTransactions(filtered);
+          setStats(processSalesStats(filtered, period));
+          setSelectedIds([]);
+      } catch (e) {
+          console.error("Failed to load business stats", e);
+      }
   }, [showHidden, period]);
 
   useEffect(() => {
@@ -50,19 +99,11 @@ const BusinessStats: React.FC = () => {
   };
 
   const handleHide = () => {
-      if (selectedIds.length === 0) return;
-      if (confirm(`Hide ${selectedIds.length} transactions?`)) {
-          archiveActions(selectedIds);
-          refreshData();
-      }
+     alert('Archive feature disabled during migration to server.');
   };
 
   const handleUnhide = () => {
-      if (selectedIds.length === 0) return;
-      if (confirm(`Unhide ${selectedIds.length} transactions?`)) {
-          unhideActions(selectedIds);
-          refreshData();
-      }
+      alert('Unhide feature disabled during migration to server.');
   };
 
   return (
@@ -177,10 +218,13 @@ const BusinessStats: React.FC = () => {
                 <th className="px-6 py-4">Product</th>
                 <th className="px-6 py-4 text-right">Amount</th>
                 <th className="px-6 py-4 text-center">Status</th>
+                <th className="px-6 py-4 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {visibleTransactions.map(t => (
+              {visibleTransactions.map(t => {
+                const items = parseItems(t.items);
+                return (
                 <tr key={t.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.includes(t.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-6 py-4">
                       <input 
@@ -193,18 +237,34 @@ const BusinessStats: React.FC = () => {
                   <td className="px-6 py-4 text-sm text-gray-500">{new Date(t.timestamp).toLocaleDateString()}</td>
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{t.userName}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">
-                    {t.items && t.items.length > 0 
-                      ? (t.items.length > 1 ? `${t.items[0].product.name} +${t.items.length-1} more` : t.items[0].product.name)
+                    {items && items.length > 0 
+                      ? (items.length > 1 ? `${items[0].product.name} +${items.length-1} more` : items[0].product.name)
                       : 'Unknown Product'}
                   </td>
                   <td className="px-6 py-4 text-right font-bold text-gray-800">Rp {t.totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
                   <td className="px-6 py-4 text-center">
                     <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold">PAID</span>
                   </td>
+                  <td className="px-6 py-4 text-center">
+                    <button 
+                        onClick={() => {
+                            const hasConsultation = items?.some((i: any) => i.product.isConsultation || i.product.name.toLowerCase().includes('consult') || i.product.nameproduct?.toLowerCase().includes('consult'));
+                            if (hasConsultation) {
+                                navigate('/consultations', { state: { view: 'clients' } });
+                            } else {
+                                navigate('/members', { state: { openPurchasesFor: t.userId } });
+                            }
+                        }}
+                        className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-colors"
+                        title="Manage Purchased Files"
+                    >
+                        <Icons.Document />
+                    </button>
+                  </td>
                 </tr>
-              ))}
+              )})}
               {visibleTransactions.length === 0 && (
-                  <tr><td colSpan={6} className="p-8 text-center text-gray-400">No transactions found.</td></tr>
+                  <tr><td colSpan={7} className="p-8 text-center text-gray-400">No transactions found.</td></tr>
               )}
             </tbody>
           </table>

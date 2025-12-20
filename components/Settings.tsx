@@ -1,13 +1,20 @@
 
-import React, { useState } from 'react';
+// @ts-nocheck
+import React, { useState, useEffect } from 'react';
 import { SystemSettings, Testimonial, SocialLink } from '../types';
-import * as db from '../services/mockDatabase';
+import { settingsApi } from '../services/settingsService';
+import { getUsers } from '../services/userService';
 import { Icons } from '../constants';
 
-const Settings: React.FC = () => {
-  const [settings, setSettings] = useState<SystemSettings>(db.getSettings());
+interface SettingsProps {
+    onUpdate?: () => void;
+}
+
+const Settings: React.FC<SettingsProps> = ({ onUpdate }) => {
+  const [settings, setSettings] = useState<SystemSettings | null>(null); // Start null to check loading
   const [successMsg, setSuccessMsg] = useState('');
-  const [activeTab, setActiveTab] = useState<'MAIN' | 'LANDING' | 'COMMISSION'>('MAIN');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [activeTab, setActiveTab] = useState<'MAIN' | 'LANDING' | 'COMMISSION' | 'MEMBER'>('MAIN');
   
   const [editingTestimonial, setEditingTestimonial] = useState<Partial<Testimonial> | null>(null);
 
@@ -15,8 +22,29 @@ const Settings: React.FC = () => {
   const [newSocialName, setNewSocialName] = useState('');
   const [newSocialUrl, setNewSocialUrl] = useState('');
 
+  // Member Search for Testimonials
+  const [users, setUsers] = useState<any[]>([]);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+
+  useEffect(() => {
+    loadSettings();
+    getUsers().then(setUsers).catch(console.error);
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+        const data = await settingsApi.getSettings();
+        setSettings(data);
+    } catch (e) {
+        console.error("Failed to load settings", e);
+        setErrorMsg('Failed to load settings. Please try refreshing.');
+    }
+  };
+
   const handleLevelCountChange = (count: number) => {
-    const newPercents = [...settings.levelPercentages];
+    if (!settings) return;
+    const newPercents = [...(settings.levelPercentages || [])];
     if (count > newPercents.length) {
       for (let i = newPercents.length; i < count; i++) newPercents.push(1);
     } else {
@@ -26,13 +54,22 @@ const Settings: React.FC = () => {
   };
 
   const handlePercentChange = (index: number, val: number) => {
+    if (!settings) return;
     const newPercents = [...settings.levelPercentages];
     newPercents[index] = val;
     setSettings({ ...settings, levelPercentages: newPercents });
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, target: 'bg' | 'logo' | 'testimonial') => {
+    if (!settings) return;
     if (e.target.files && e.target.files[0]) {
+       const file = e.target.files[0];
+       if (file.size > 10 * 1024 * 1024) { // 10MB Limit
+           alert('Image is too large (Max 10MB). Please resize or compress your image.');
+           e.target.value = ''; // Reset input
+           return;
+       }
+
        const reader = new FileReader();
        reader.onload = (x) => {
           if (x.target?.result) {
@@ -45,12 +82,12 @@ const Settings: React.FC = () => {
               }
           }
        };
-       reader.readAsDataURL(e.target.files[0]);
+       reader.readAsDataURL(file);
     }
   };
 
   const saveTestimonial = () => {
-      if (!editingTestimonial) return;
+      if (!editingTestimonial || !settings) return;
       const currentList = settings.landingPage.testimonials || [];
       let newList;
       if (editingTestimonial.id) {
@@ -63,17 +100,20 @@ const Settings: React.FC = () => {
   };
 
   const deleteTestimonial = (id: string) => {
+      if (!settings) return;
       const newList = settings.landingPage.testimonials.filter(t => t.id !== id);
       setSettings({ ...settings, landingPage: { ...settings.landingPage, testimonials: newList } });
   };
 
   const handleFeatureBoxChange = (idx: number, field: 'title' | 'description', value: string) => {
+      if (!settings) return;
       const newBoxes = [...settings.landingPage.featureBoxes];
       newBoxes[idx] = { ...newBoxes[idx], [field]: value };
       setSettings({ ...settings, landingPage: { ...settings.landingPage, featureBoxes: newBoxes } });
   };
 
   const addCustomSocial = () => {
+    if (!settings) return;
     if (!newSocialName || !newSocialUrl) return;
     const currentOthers = settings.landingPage.footer.socialMedia.others || [];
     const newOthers = [...currentOthers, { name: newSocialName, url: newSocialUrl }];
@@ -83,19 +123,31 @@ const Settings: React.FC = () => {
   };
 
   const removeCustomSocial = (idx: number) => {
+      if (!settings) return;
       const currentOthers = settings.landingPage.footer.socialMedia.others || [];
       const newOthers = currentOthers.filter((_, i) => i !== idx);
       setSettings({...settings, landingPage: {...settings.landingPage, footer: {...settings.landingPage.footer, socialMedia: {...settings.landingPage.footer.socialMedia, others: newOthers}}}});
   };
 
-  const handleSave = () => {
-    db.saveSettings(settings);
-    setSuccessMsg('Settings updated successfully!');
-    setTimeout(() => {
-        setSuccessMsg('');
-        window.location.reload(); 
-    }, 1500);
+  const handleSave = async () => {
+    if (!settings) return;
+    try {
+        await settingsApi.updateSettings(settings);
+        setSuccessMsg('Settings updated successfully!');
+        if(onUpdate) onUpdate(); // Trigger global refresh
+        setTimeout(() => {
+            setSuccessMsg('');
+        }, 1500);
+    } catch (e: any) {
+        if (e.response && e.response.status === 413) {
+            setErrorMsg('File too large. Please resize your image or upload a smaller file.');
+        } else {
+            setErrorMsg('Failed to save settings. ' + (e.response?.data?.message || e.message));
+        }
+    }
   };
+
+  if (!settings) return <div className="p-8 text-center text-gray-500">Loading settings...</div>;
 
   if (activeTab === 'MAIN') {
       return (
@@ -123,6 +175,17 @@ const Settings: React.FC = () => {
                       <h3 className="text-xl font-bold text-gray-800">Commission & Tax</h3>
                       <p className="text-gray-500 text-center mt-2 text-sm">Manage Levels, Percentages, Point Rate & PPn</p>
                   </button>
+
+                  <button 
+                    onClick={() => setActiveTab('MEMBER')}
+                    className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center hover:bg-purple-50 hover:border-purple-200 transition-all group"
+                  >
+                      <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                          <Icons.Users />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-800">Member Config</h3>
+                      <p className="text-gray-500 text-center mt-2 text-sm">Profile Visibility & Permissions</p>
+                  </button>
               </div>
           </div>
       );
@@ -135,7 +198,7 @@ const Settings: React.FC = () => {
               <span className="text-lg">←</span> Back
           </button>
           <h2 className="text-2xl font-bold text-gray-800">
-              {activeTab === 'LANDING' ? 'Edit Landing Page' : 'Commission & Tax Configuration'}
+              {activeTab === 'LANDING' ? 'Edit Landing Page' : activeTab === 'COMMISSION' ? 'Commission & Tax Configuration' : 'Member Configuration'}
           </h2>
       </div>
 
@@ -238,7 +301,7 @@ const Settings: React.FC = () => {
                         <textarea value={settings.landingPage.features.description} onChange={e => setSettings({...settings, landingPage: {...settings.landingPage, features: {...settings.landingPage.features, description: e.target.value}}})} className="w-full px-4 py-2 border rounded-lg" rows={2} />
                     </div>
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {settings.landingPage.featureBoxes.map((box, idx) => (
+                        {settings.landingPage.featureBoxes?.map((box, idx) => (
                             <div key={box.id} className="bg-gray-50 p-3 rounded border border-gray-200">
                                 <h5 className="font-bold text-xs text-gray-500 uppercase mb-2">Feature Box {idx + 1}</h5>
                                 <input className="w-full border p-1 rounded text-sm mb-2" value={box.title} onChange={e => handleFeatureBoxChange(idx, 'title', e.target.value)} placeholder="Box Title" />
@@ -258,6 +321,55 @@ const Settings: React.FC = () => {
                 {editingTestimonial && (
                     <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-blue-200">
                         <h5 className="font-bold mb-3">{editingTestimonial.id ? 'Edit Testimonial' : 'New Testimonial'}</h5>
+                        
+                        {/* Member Picker */}
+                        <div className="mb-4 relative z-20">
+                            <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Quick Fill from Member</label>
+                            <input 
+                                placeholder="Search by name or username..." 
+                                className="border p-2 rounded w-full text-sm bg-white"
+                                value={memberSearch}
+                                onChange={e => {
+                                    setMemberSearch(e.target.value);
+                                    setShowMemberDropdown(true);
+                                }}
+                                onFocus={() => setShowMemberDropdown(true)}
+                            />
+                            {showMemberDropdown && memberSearch && (
+                                <div className="absolute top-full left-0 right-0 bg-white border shadow-xl max-h-48 overflow-y-auto rounded-b-lg mt-1">
+                                    {users.filter(u => 
+                                        u.name?.toLowerCase().includes(memberSearch.toLowerCase()) || 
+                                        u.username?.toLowerCase().includes(memberSearch.toLowerCase())
+                                    ).slice(0, 5).map(u => (
+                                        <div 
+                                            key={u.id} 
+                                            className="p-2 hover:bg-blue-50 cursor-pointer flex items-center gap-3 border-b border-gray-100 last:border-0" 
+                                            onClick={() => {
+                                                setEditingTestimonial({ 
+                                                    ...editingTestimonial, 
+                                                    name: u.name, 
+                                                    image: u.avatar || '',
+                                                    role: editingTestimonial?.role // Preserve if typed
+                                                });
+                                                setMemberSearch('');
+                                                setShowMemberDropdown(false);
+                                            }}
+                                        >
+                                            {u.avatar ? <img src={u.avatar} className="w-8 h-8 rounded-full object-cover shadow-sm"/> : <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">{u.name.charAt(0)}</div>}
+                                            <div className="flex-1">
+                                                <p className="font-bold text-sm text-gray-800">{u.name}</p>
+                                                <p className="text-xs text-gray-500">@{u.username || 'user'}</p>
+                                            </div>
+                                            <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded">Select</span>
+                                        </div>
+                                    ))}
+                                    {users.filter(u => u.name?.toLowerCase().includes(memberSearch.toLowerCase())).length === 0 && (
+                                        <div className="p-3 text-center text-gray-400 text-xs italic">No member found</div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <input placeholder="Name" className="border p-2 rounded" value={editingTestimonial.name || ''} onChange={e => setEditingTestimonial({...editingTestimonial, name: e.target.value})} />
                             <input placeholder="Role (e.g. Diamond Member)" className="border p-2 rounded" value={editingTestimonial.role || ''} onChange={e => setEditingTestimonial({...editingTestimonial, role: e.target.value})} />
@@ -355,6 +467,10 @@ const Settings: React.FC = () => {
                                <input placeholder="TikTok URL" value={settings.landingPage.footer.socialMedia.tiktok} onChange={e => setSettings({...settings, landingPage: {...settings.landingPage, footer: {...settings.landingPage.footer, socialMedia: {...settings.landingPage.footer.socialMedia, tiktok: e.target.value}}}})} className="w-full px-3 py-2 border rounded-lg text-sm" />
                            </div>
                            <div className="flex items-center gap-2">
+                               <Icons.Youtube />
+                               <input placeholder="YouTube URL" value={settings.landingPage.footer.socialMedia.youtube || ''} onChange={e => setSettings({...settings, landingPage: {...settings.landingPage, footer: {...settings.landingPage.footer, socialMedia: {...settings.landingPage.footer.socialMedia, youtube: e.target.value}}}})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                           </div>
+                           <div className="flex items-center gap-2">
                                <Icons.Telegram />
                                <input placeholder="Telegram URL" value={settings.landingPage.footer.socialMedia.telegram || ''} onChange={e => setSettings({...settings, landingPage: {...settings.landingPage, footer: {...settings.landingPage.footer, socialMedia: {...settings.landingPage.footer.socialMedia, telegram: e.target.value}}}})} className="w-full px-3 py-2 border rounded-lg text-sm" />
                            </div>
@@ -422,7 +538,39 @@ const Settings: React.FC = () => {
         </div>
       )}
 
+      {activeTab === 'MEMBER' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Member Profile Configuration</h3>
+            
+            <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+                    <div>
+                        <h4 className="font-bold text-gray-800">Show Birth Details</h4>
+                        <p className="text-sm text-gray-500">Allow members to see/edit Birth Date, Time, and City in their profile.</p>
+                    </div>
+                    
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            className="sr-only peer" 
+                            checked={settings.memberProfileConfig?.showBirthDetails !== false} 
+                            onChange={(e) => setSettings({
+                                ...settings, 
+                                memberProfileConfig: { 
+                                    ...settings.memberProfileConfig, 
+                                    showBirthDetails: e.target.checked 
+                                }
+                            })} 
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+      )}
+
       {successMsg && <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative animate-pulse">{successMsg}</div>}
+      {errorMsg && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative animate-pulse">{errorMsg}</div>}
 
       <div className="flex justify-end pt-4">
         <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg">Save Configuration</button>

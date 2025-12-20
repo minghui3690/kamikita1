@@ -15,36 +15,56 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, currentPage, onNavigate, currentLang, onLangChange }) => {
-  const isAdmin = user.role === UserRole.ADMIN;
+  const isSuperAdmin = user.role === UserRole.ADMIN;
+  const isManager = user.role === UserRole.MANAGER; // Assuming UserRole.MANAGER exists now
+  const isAdminOrManager = isSuperAdmin || isManager;
+
   const networkStats = useMemo(() => getNetworkStats(user.id), [user]);
   const settings = getSettings();
   const t = TRANSLATIONS[currentLang] || TRANSLATIONS['EN'];
 
-  // Base Menu
-  const menuItems = [
-    { id: 'dashboard', label: t.dashboard, icon: Icons.Dashboard },
-    { id: 'products', label: isAdmin ? t.products : t.shop, icon: Icons.Product },
-    { id: 'network', label: isAdmin ? t.memberDir : t.myNet, icon: Icons.Network },
-    // Wallet removed here for Members, added conditionally for Admin below
-    { id: 'profile', label: t.profile, icon: Icons.User },
+
+
+  // Menu Configuration
+  const allMenuItems = [
+    { id: 'dashboard', label: t.dashboard, icon: Icons.Dashboard, visible: true },
+    { id: 'stats', label: t.stats, icon: Icons.Chart, visible: isAdminOrManager },
+    { id: 'member-stats', label: t.stats, icon: Icons.Chart, visible: !isAdminOrManager }, // [NEW] Member Business Stats
+    { id: 'products', label: isAdminOrManager ? t.products : t.shop, icon: Icons.Product, visible: true },
+    { id: isAdminOrManager ? 'members' : 'network', label: isAdminOrManager ? t.memberDir : t.myNet, icon: Icons.Network, visible: true },
+
+    // Member Specific
+    { id: 'purchases', label: t.purchases, icon: Icons.Document, visible: !isAdminOrManager },
+    
+    // Admin/Manager Wallet Functions
+    { id: 'wallet', label: t.reqWithdraw, icon: Icons.Wallet, visible: isAdminOrManager },
+    { id: 'admin-wallet', label: t.adminWallet, icon: Icons.Money, visible: isAdminOrManager },
+    
+    // Customers (Both see it, label differs)
+    { id: 'customers', label: isAdminOrManager ? t.customers : t.guestCustomers, icon: Icons.User, visible: true },
+
+    // Consultation (Admin/Manager Only)
+    { id: 'consultations', label: t.manageConsultations, icon: Icons.Calendar, visible: isAdminOrManager },
+    { id: 'my-consultations', label: t.consultations, icon: Icons.Calendar, visible: !isAdminOrManager }, // [NEW] Member View
+    
+    // Member Commissions
+    { id: 'commissions', label: t.commissions, icon: Icons.Money, visible: !isAdminOrManager },
+    
+    // Kaka (Member View) - Only if unlocked
+    { id: 'kaka', label: t.infoKaka, icon: Icons.Info, visible: !isAdminOrManager && user.isKakaUnlocked },
+    { id: 'human-design', label: t.myHumanDesign, icon: Icons.Chart, visible: !isAdminOrManager && user.isHumanDesignUnlocked },
+    
+    { id: 'admin/knowledge', label: t.hdKnowledge, icon: Icons.Book, visible: isSuperAdmin },
+    { id: 'ai-consultant', label: t.aiConsultant, icon: Icons.MessageSquare, visible: isAdminOrManager || (user.isAiAssistantUnlocked || false) }, // [NEW] AI Access logic
+
+    // Settings (Super Admin Only)
+    { id: 'settings', label: t.settings, icon: Icons.Settings, visible: isSuperAdmin },
+    
+    // Profile
+    { id: 'profile', label: t.profile, icon: Icons.User, visible: true },
   ];
 
-  if (isAdmin) {
-    menuItems.splice(1, 0, { id: 'stats', label: t.stats, icon: Icons.Chart });
-    // Admin still sees "Withdrawal Requests" (mapped to 'wallet' route)
-    menuItems.splice(3, 0, { id: 'wallet', label: t.reqWithdraw, icon: Icons.Wallet });
-    // Vouchers & KAKA accessed via Products in Admin
-    menuItems.push({ id: 'settings', label: t.settings, icon: Icons.Settings });
-  } else {
-    // Member Specific Menus
-    menuItems.splice(2, 0, { id: 'purchases', label: t.purchases, icon: Icons.Document });
-    menuItems.splice(4, 0, { id: 'commissions', label: t.commissions, icon: Icons.Money });
-    
-    // Add Info KAKA if unlocked
-    if (user.isKakaUnlocked) {
-        menuItems.splice(5, 0, { id: 'kaka', label: t.infoKaka, icon: Icons.Info });
-    }
-  }
+  const menuItems = allMenuItems.filter(item => item.visible);
 
   const handleCopyReferral = () => {
      const url = `https://rdabusiness.com/ref/${user.referralCode}`;
@@ -70,7 +90,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, currentPage, 
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors duration-200 ${
+              className={`w-full flex items-center text-left px-4 py-3 text-sm font-medium rounded-lg transition-colors duration-200 ${
                 currentPage === item.id
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
                   : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -113,7 +133,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, currentPage, 
               <span className="md:hidden"><Icons.Dashboard /></span>
               {menuItems.find(m => m.id === currentPage)?.label || t.dashboard}
             </h2>
-            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4">
+
+               <div className="hidden md:flex flex-col items-end border-r pr-4 mr-0">
+                   <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Username</span>
+                   <span className="text-sm font-mono font-bold text-blue-900">{user.username || '...'}</span>
+               </div>
               
               <div className="flex items-center">
                   <span className="mr-2 text-xs text-gray-400"><Icons.Globe /></span>

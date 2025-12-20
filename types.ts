@@ -1,12 +1,14 @@
 
 export enum UserRole {
   ADMIN = 'ADMIN',
+  MANAGER = 'MANAGER',
   MEMBER = 'MEMBER',
 }
 
 export interface User {
   id: string;
   name: string;
+  username?: string; // [NEW]
   email: string;
   role: UserRole;
   referralCode: string;
@@ -18,6 +20,9 @@ export interface User {
   avatar?: string;
   isActive: boolean;
   isKakaUnlocked?: boolean; // New field for KAKA access
+  isHumanDesignUnlocked?: boolean; // New field for HD access
+  isAiAssistantUnlocked?: boolean; // [NEW] AI Access
+  membershipExpiryDate?: string; // [NEW] Membership Expiry ISO String
   kyc: {
     phone: string;
     address: string;
@@ -29,18 +34,23 @@ export interface User {
     birthDate: string;
     birthCity: string;
     birthTime: string; // HH:mm
+    withdrawalMethods?: ManualPaymentMethod[]; // Saved withdrawal destinations
   };
 }
 
 export interface Product {
   id: string;
-  name: string;
+  name: string; // [NEW] Added for consistency with nameproduct
+  nameproduct: string; // [RENAMED]
   price: number;
   points: number;
   description: string;
   image?: string;
   pdfUrl?: string; // Link to digital product
   customRedirectUrl?: string; // URL to redirect after purchase
+  isConsultation?: boolean;
+  consultationQuota?: number;
+  activeDays?: number; // [NEW] Duration in days
 }
 
 export interface CartItem {
@@ -165,6 +175,7 @@ export interface HumanDesignProfile {
   chartBirthDate?: string;
   chartBirthTime?: string;
   chartBirthCity?: string;
+  chartDesignDate?: string; // [NEW]
 
   // Basic Info
   type: string;
@@ -179,6 +190,7 @@ export interface HumanDesignProfile {
   // Variables (New Fields from Screenshot)
   digestion?: string; // Sistem Pencernaan
   sense?: string; // Kepekaan
+  designSense?: string; // Kepekaan Tak Sadar [NEW]
   motivation?: string; // Motivasi
   perspective?: string; // Perspektif
   environment?: string; // Lingkungan
@@ -230,6 +242,21 @@ export interface MidtransConfig {
   snapUrl: string;
 }
 
+export interface ManualPaymentMethod {
+  id: string;
+  type: 'BANK' | 'EWALLET';
+  name: string; // "BCA", "OVO", "GoPay"
+  accountNumber: string;
+  accountHolder: string;
+  logo?: string; 
+  isActive: boolean;
+}
+
+export interface QRISConfig {
+  image: string;
+  nmid?: string;
+}
+
 export interface SystemSettings {
   commissionLevels: number;
   levelPercentages: number[];
@@ -264,6 +291,7 @@ export interface SystemSettings {
         instagram: string;
         whatsapp: string;
         tiktok: string;
+        youtube?: string;
         telegram?: string;
         others?: SocialLink[];
       };
@@ -273,10 +301,18 @@ export interface SystemSettings {
     bankName: string;
     accountNumber: string;
     accountHolder: string;
-    qrisImage: string;
+    qrisImage: string; // Legacy
+    
+    // New Extended Config
+    qris?: QRISConfig;
+    manualMethods?: ManualPaymentMethod[];
+    
     paymentGatewayKey: string; // Legacy
     gatewayEnabled: boolean;
     midtrans: MidtransConfig;
+  };
+  memberProfileConfig?: {
+    showBirthDetails: boolean;
   };
 }
 

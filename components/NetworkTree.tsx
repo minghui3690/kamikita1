@@ -65,7 +65,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, level, maxDepth }) => {
 
           <div className="ml-4 pl-4 border-l border-gray-100">
             <div className="text-xs text-emerald-600 font-semibold">
-              Earned: Rp {node.totalEarnings.toLocaleString('id-ID')}
+              Earned: Rp {(node.totalEarnings || 0).toLocaleString('id-ID')}
             </div>
           </div>
         </div>

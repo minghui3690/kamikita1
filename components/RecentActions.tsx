@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { getCombinedActions, archiveActions, unhideActions } from '../services/mockDatabase';
+// import { getCombinedActions, archiveActions, unhideActions } from '../services/mockDatabase';
 import { User } from '../types';
 import { Icons, TRANSLATIONS } from '../constants';
 
@@ -16,10 +16,12 @@ const RecentActions: React.FC<Props> = ({ user, currentLang = 'EN' }) => {
   const [showHidden, setShowHidden] = useState(false);
   const t = TRANSLATIONS[currentLang] || TRANSLATIONS['EN'];
 
-  const refreshData = useCallback(() => {
-    const data = getCombinedActions(user, showHidden);
-    setActions(data);
-    setSelectedIds([]);
+  const refreshData = useCallback(async () => {
+    try {
+        const data = await import('../services/userService').then(m => m.userApi.getRecentActions(showHidden));
+        setActions(data);
+        setSelectedIds([]);
+    } catch(e) { console.error(e); }
   }, [user, showHidden]);
 
   useEffect(() => {
@@ -43,19 +45,25 @@ const RecentActions: React.FC<Props> = ({ user, currentLang = 'EN' }) => {
       }
   };
 
-  const handleHide = () => {
+  const handleHide = async () => {
       if (selectedIds.length === 0) return;
-      if (confirm(`Hide ${selectedIds.length} items?`)) {
-          archiveActions(selectedIds);
-          refreshData(); 
+      if (confirm(`${t.archive} ${selectedIds.length} items?`)) {
+          try {
+              const itemsToArchive = actions.filter(a => selectedIds.includes(a.id)).map(a => ({ id: a.id, type: a.type }));
+              await import('../services/userService').then(m => m.userApi.archiveActions(itemsToArchive, true));
+              refreshData();
+          } catch (e) { console.error(e); alert('Failed to archive'); }
       }
   };
 
-  const handleUnhide = () => {
+  const handleUnhide = async () => {
       if (selectedIds.length === 0) return;
-      if (confirm(`Unhide ${selectedIds.length} items?`)) {
-          unhideActions(selectedIds);
-          refreshData();
+      if (confirm(`${t.unhide} ${selectedIds.length} items?`)) {
+          try {
+              const itemsToUnhide = actions.filter(a => selectedIds.includes(a.id)).map(a => ({ id: a.id, type: a.type }));
+              await import('../services/userService').then(m => m.userApi.archiveActions(itemsToUnhide, false));
+              refreshData();
+          } catch (e) { console.error(e); alert('Failed to unhide'); }
       }
   };
 

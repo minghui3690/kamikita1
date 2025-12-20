@@ -31,9 +31,9 @@ const setStorage = (key: string, val: any) => {
 
 // ... (DEFAULT_SETTINGS, DEFAULT_PRODUCTS, DEFAULT_ADMIN remain the same)
 const DEFAULT_SETTINGS: SystemSettings = {
-  commissionLevels: 3,
-  levelPercentages: [20, 5, 2],
-  pointRate: 1000,
+  commissionLevels: 2,
+  levelPercentages: [20, 5],
+  pointRate: 1,
   taxPercentage: 11,
   announcements: [
     { id: '1', title: 'Welcome to Rich Dragon', date: new Date().toISOString(), content: 'Welcome to our new system! We are excited to have you on board.' },
@@ -41,8 +41,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
     { id: '3', title: 'New Product Launch', date: new Date(Date.now() - 172800000).toISOString(), content: 'Check out our new Diamond Package with enhanced benefits!' }
   ],
   branding: {
-    appTitle: 'Rich Dragon',
-    appSubtitle: 'Empowering Network Marketing',
+    appTitle: 'Rich Dragon Academy',
+    appSubtitle: 'Build Your Destiny',
     logo: '',
     theme: {
       cardBackground: '#ffffff',
@@ -50,28 +50,28 @@ const DEFAULT_SETTINGS: SystemSettings = {
     }
   },
   productPage: {
-    title: 'Our Products',
+    title: 'Produk Kami',
     subtitle: 'High quality digital products'
   },
   landingPage: {
     title: 'Build Your Future',
     description: 'Join the fastest growing network.',
-    backgroundImage: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&q=80',
+    backgroundImage: 'https://images.pexels.com/photos/7888985/pexels-photo-7888985.jpeg',
     logo: '',
     textColor: '#ffffff',
-    heroAlignment: 'left',
+    heroAlignment: 'center',
     features: {
-      title: 'Why Choose Us',
+      title: 'Mengapa Bergabung Dengan Kami',
       description: 'We provide the best tools for your success.'
     },
     featureBoxes: [
-      { id: '1', title: 'Easy to Start', description: 'Register and start earning immediately.', icon: 'star' },
-      { id: '2', title: 'Community', description: 'Join thousands of successful members.', icon: 'users' },
-      { id: '3', title: 'Rewards', description: 'Earn points and redeem for cash.', icon: 'trending' }
+      { id: '1', title: 'Mudah Untuk Memulai', description: 'Daftar dan mulai mendapatkan berbagai manfaat luarbiasa.', icon: 'star' },
+      { id: '2', title: 'Komunitas', description: 'Bergabung dengan Orang-Orang Positif dan Senang Berbagi Kebaikan', icon: 'users' },
+      { id: '3', title: 'Reward', description: 'Dapatkan poin dan cairkan menjadi uang cash.', icon: 'trending' }
     ],
     testimonials: [],
     footer: {
-      aboutText: 'Leading MLM Platform.',
+      aboutText: 'Platform Berbagi Kebaikan.',
       contactEmail: 'support@richdragon.id',
       contactPhone: '+62 812 3456 7890',
       copyrightText: 'All rights reserved.',
@@ -86,8 +86,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   },
   paymentConfig: {
     bankName: 'BCA',
-    accountNumber: '1234567890',
-    accountHolder: 'PT Rich Dragon',
+    accountNumber: '8375280201',
+    accountHolder: 'Hendrawan',
     qrisImage: '',
     paymentGatewayKey: '',
     gatewayEnabled: false,
@@ -102,8 +102,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
 };
 
 const DEFAULT_PRODUCTS: Product[] = [
-  { id: 'p1', name: 'Starter Pack', price: 500000, points: 500, description: 'Basic membership package.', image: 'https://placehold.co/400' },
-  { id: 'p2', name: 'Pro Pack', price: 1500000, points: 1500, description: 'Professional membership package.', image: 'https://placehold.co/400' },
+  { id: 'p1', nameproduct: 'HD Simpliefied Report', price: 100000, points: 100000, description: 'Ringkasan Report Human Design Anda.', image: 'https://placehold.co/400' },
+  { id: 'p2', nameproduct: 'Konsultasi HD Simplified Report', price: 500000, points: 500000, description: 'Paket Konsultasi Human Design Anda.', image: 'https://placehold.co/400' },
 ];
 
 const DEFAULT_ADMIN: User = {
@@ -130,14 +130,20 @@ export const seedData = () => {
   if (!currentSettings) {
       setStorage(KEYS.SETTINGS, DEFAULT_SETTINGS);
   } else {
-      currentSettings.commissionLevels = 3;
-      currentSettings.levelPercentages = [20, 5, 2];
-      currentSettings.pointRate = 1000;
+      currentSettings.commissionLevels = 2;
+      currentSettings.levelPercentages = [20, 5];
+      if (!currentSettings.pointRate) currentSettings.pointRate = 1;
       if (currentSettings.announcements.length < 3) {
           currentSettings.announcements = DEFAULT_SETTINGS.announcements;
       }
       if (!currentSettings.landingPage.footer.socialMedia.facebook) {
           currentSettings.landingPage.footer.socialMedia = DEFAULT_SETTINGS.landingPage.footer.socialMedia;
+      }
+      if (!currentSettings.branding || !currentSettings.branding.theme) {
+          currentSettings.branding = { ...DEFAULT_SETTINGS.branding, ...currentSettings.branding };
+          if (!currentSettings.branding.theme) {
+              currentSettings.branding.theme = DEFAULT_SETTINGS.branding.theme;
+          }
       }
       setStorage(KEYS.SETTINGS, currentSettings);
   }
@@ -147,8 +153,9 @@ export const seedData = () => {
       setStorage(KEYS.PRODUCTS, DEFAULT_PRODUCTS);
   } else {
       const updatedProducts = storedProducts.map(p => {
-          if (p.id === 'p1' && p.points === 50) return { ...p, points: 500 };
-          if (p.id === 'p2' && p.points === 150) return { ...p, points: 1500 };
+          // Force update p1 and p2 to match new defaults
+          if (p.id === 'p1') return { ...p, ...DEFAULT_PRODUCTS.find(dp => dp.id === 'p1') };
+          if (p.id === 'p2') return { ...p, ...DEFAULT_PRODUCTS.find(dp => dp.id === 'p2') };
           return p;
       });
       setStorage(KEYS.PRODUCTS, updatedProducts);
@@ -165,9 +172,8 @@ export const seedData = () => {
   if (adminIndex !== -1) {
       users[adminIndex] = {
           ...users[adminIndex],
-          password: DEFAULT_ADMIN.password,
-          role: UserRole.ADMIN,
-          isActive: true
+          ...DEFAULT_ADMIN, // Sync all default admin properties
+          id: users[adminIndex].id // Preserve ID just in case (though should be same)
       };
   } else {
       users.push(DEFAULT_ADMIN);
@@ -179,7 +185,10 @@ export const seedData = () => {
 export const getSettings = (): SystemSettings => getStorage(KEYS.SETTINGS, DEFAULT_SETTINGS);
 export const saveSettings = (s: SystemSettings) => setStorage(KEYS.SETTINGS, s);
 export const getProducts = (): Product[] => getStorage(KEYS.PRODUCTS, DEFAULT_PRODUCTS);
-export const saveProducts = (p: Product[]) => setStorage(KEYS.PRODUCTS, p);
+export const saveProducts = (p: Product[]) => {
+    setStorage(KEYS.PRODUCTS, p);
+    window.dispatchEvent(new Event('rda_products_updated'));
+};
 export const getUsers = (): User[] => getStorage(KEYS.USERS, [DEFAULT_ADMIN]);
 const saveUsers = (u: User[]) => setStorage(KEYS.USERS, u);
 
@@ -210,7 +219,7 @@ export const registerUser = (name: string, email: string, pass: string, refCode?
     email,
     password: pass,
     role: UserRole.MEMBER,
-    referralCode: 'REF' + Math.floor(Math.random() * 100000),
+    referralCode: 'RDA' + Math.floor(Math.random() * 100000),
     uplineId,
     walletBalance: 0,
     totalEarnings: 0,
@@ -338,8 +347,18 @@ const distributeCommissions = (sourceUser: User, purchaseAmount: number, transac
 export const processMultiCartPurchase = (userId: string, items: CartItem[], paymentMethod: 'BANK_TRANSFER' | 'GATEWAY' | 'POINT_CUT', voucherCode?: string, pointsRedeemed: number = 0, paymentProof?: string) => {
     const users = getUsers();
     const settings = getSettings();
-    const user = users.find(u => u.id === userId);
-    if (!user) throw new Error('User not found');
+    let user = users.find(u => u.id === userId);
+    
+    // Failsafe: Reload from storage if user not found in current memory state
+    if (!user) {
+        const freshUsers = getStorage(KEYS.USERS, []);
+        user = freshUsers.find((u: User) => u.id === userId);
+    }
+
+    if (!user) {
+        console.error('Purchase failed: User ID not found', userId);
+        throw new Error(`User authentication error (ID: ${userId}). Please logout and login again.`);
+    }
     const subtotal = items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
     const totalPoints = items.reduce((sum, item) => sum + (item.product.points * item.quantity), 0);
     let discount = 0;
@@ -591,7 +610,7 @@ export const toggleKakaAccess = (userId: string) => {
 export const grantManualAccess = (userId: string, fileName: string, fileUrl: string) => {
     const product: Product = {
         id: 'manual_' + Date.now(),
-        name: fileName,
+        nameproduct: fileName,
         price: 0,
         points: 0,
         description: 'Manual Access Grant',
@@ -628,7 +647,7 @@ export const updateUserAccess = (userId: string, productId: string, newUrl: stri
             t.items.forEach(i => {
                 if (i.product.id === productId) {
                     i.product.pdfUrl = newUrl;
-                    i.product.name = newName;
+                    i.product.nameproduct = newName;
                     updated = true;
                 }
             });
@@ -673,7 +692,7 @@ export const getCombinedActions = (user: User, showArchived: boolean = false) =>
             date: t.timestamp,
             userId: t.userId,
             userName: t.userName,
-            description: t.items.map(i => i.product.name).join(', '),
+            description: t.items.map(i => i.product.nameproduct).join(', '),
             amount: t.totalAmount,
             status: t.status,
             isArchived: t.isArchived
