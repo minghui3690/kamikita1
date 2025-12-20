@@ -44,7 +44,7 @@ export const register = async (req: Request, res: Response) => {
         password: hashedPassword,
         referralCode: newRefCode,
         uplineId,
-        walletBalance: 0,
+        // walletBalance: 0, // Handled by default value in Schema
         kyc: {
              phone: '', address: '', bankName: '', accountNumber: '', accountHolder: '', isVerified: false,
              gender: 'Man', birthDate: '', birthCity: '', birthTime: ''
@@ -67,6 +67,9 @@ export const login = async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(400).json({ message: 'Invalid credentials' });
     if (!user.isActive) return res.status(403).json({ message: 'Account inactive' });
+
+    // Explicitly check for password existance to satisfy TS strict null checks
+    if (!user.password) return res.status(400).json({ message: 'Invalid credentials' });
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(400).json({ message: 'Invalid credentials' });
